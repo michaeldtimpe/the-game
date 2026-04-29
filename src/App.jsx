@@ -3,16 +3,16 @@ import MovieCard from './components/MovieCard';
 import ShuffleButton from './components/ShuffleButton';
 
 const LIBRARY_EMOJIS = {
-  'New': '\uD83C\uDF7F',
-  'Fang': '\uD83D\uDC3A',
-  'Floof': '\uD83D\uDC36',
+  'New': '🍿',
+  'Fang': '🐺',
+  'Floof': '🐶',
 };
 
 const STUDIO_EMOJIS = {
-  'Disney': '\uD83D\uDC2D',
-  'Marvel': '\uD83E\uDDB8',
-  'Pixar': '\uD83D\uDE80',
-  'Lucasarts': '\u2B50',
+  'Disney': '🐭',
+  'Marvel': '🦸',
+  'Pixar': '🚀',
+  'Lucasarts': '⭐',
 };
 
 export default function App() {
@@ -47,16 +47,21 @@ export default function App() {
     return () => clearTimeout(splashTimer);
   }, []);
 
+  const handleKeyDown = (event) => {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+      event.preventDefault();
+    }
+  };
+
   if (showSplash) {
     return (
-      <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>
-        <h1 className="splash-title">The Game</h1>
+      <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>\n        <h1 className="splash-title">The Game</h1>
       </div>
     );
   }
 
   return (
-    <div className={`app fade-in${mobileView ? ' mobile' : ''}`}>
+    <div className={`app fade-in${mobileView ? ' mobile' : ''}`} onKeyDown={handleKeyDown}>
       <header>
         <h1 className="app-title">The Game</h1>
         <div className="header-buttons">
@@ -65,7 +70,7 @@ export default function App() {
             onClick={() => setMobileView(!mobileView)}
             title={mobileView ? 'Desktop view' : 'Mobile view'}
           >
-            {mobileView ? '\uD83D\uDDA5\uFE0F' : '\uD83D\uDCF1'}
+            {mobileView ? '🖥️' : '📱'}
           </button>
           <ShuffleButton onClick={shuffle} loading={loading} hasData={!!data} />
         </div>

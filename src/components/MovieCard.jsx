@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function MovieCard({ title, posterUrl, isSelected }) {
   const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    // Add listener binding here
+  }, []);
 
   return (
     <div className="movie-card">

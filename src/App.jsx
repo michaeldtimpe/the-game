@@ -51,7 +51,8 @@ export default function App() {
     return (
       <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>
         <h1 className="splash-title">The Game</h1>
-      </div>
+        <div onKeyDown={handleKeyDown}></div>
+</div>
     );
   }
 
@@ -68,10 +69,12 @@ export default function App() {
             {mobileView ? '\uD83D\uDDA5\uFE0F' : '\uD83D\uDCF1'}
           </button>
           <ShuffleButton onClick={shuffle} loading={loading} hasData={!!data} />
-        </div>
+          <div onKeyDown={handleKeyDown}></div>
+</div>
       </header>
 
-      {error && <div className="error-banner">Failed to load: {error}</div>}
+      {error && <div className="error-banner">Failed to load: {error}  <div onKeyDown={handleKeyDown}></div>
+</div>}
 
       {data && (
         <main>
@@ -90,7 +93,8 @@ export default function App() {
                       isSelected={i === lib.selectedIndex}
                     />
                   ))}
-                </div>
+                  <div onKeyDown={handleKeyDown}></div>
+</div>
               )}
             </section>
           ))}
@@ -105,9 +109,11 @@ export default function App() {
                 />
               </section>
             ))}
-          </div>
+            <div onKeyDown={handleKeyDown}></div>
+</div>
         </main>
       )}
-    </div>
+      <div onKeyDown={handleKeyDown}></div>
+</div>
   );
 }

@@ -44,70 +44,21 @@ export default function App() {
       setSplashFading(true);
       setTimeout(() => setShowSplash(false), 800);
     }, 4200); // 4.2s hold + 0.8s fade = 5s total
-    return () => clearTimeout(splashTimer);
+
+    const handleKeyPress = (event) => {
+      if (event.key === 'r' && !document.activeElement.isContentEditable && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        shuffle();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      clearTimeout(splashTimer);
+      window.removeEventListener('keydown', handleKeyPress);
+    };
   }, []);
 
   if (showSplash) {
     return (
-      <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>
-        <h1 className="splash-title">The Game</h1>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`app fade-in${mobileView ? ' mobile' : ''}`}>
-      <header>
-        <h1 className="app-title">The Game</h1>
-        <div className="header-buttons">
-          <button
-            className="view-toggle-btn"
-            onClick={() => setMobileView(!mobileView)}
-            title={mobileView ? 'Desktop view' : 'Mobile view'}
-          >
-            {mobileView ? '\uD83D\uDDA5\uFE0F' : '\uD83D\uDCF1'}
-          </button>
-          <ShuffleButton onClick={shuffle} loading={loading} hasData={!!data} />
-        </div>
-      </header>
-
-      {error && <div className="error-banner">Failed to load: {error}</div>}
-
-      {data && (
-        <main>
-          {data.libraries.map((lib) => (
-            <section key={lib.name} className="library-section">
-              <h2>{LIBRARY_EMOJIS[lib.name] || ''} {lib.name}</h2>
-              {lib.movies.length === 0 ? (
-                <p className="empty-msg">No movies available</p>
-              ) : (
-                <div className="movie-row library-row">
-                  {lib.movies.map((movie, i) => (
-                    <MovieCard
-                      key={`${lib.name}-${i}`}
-                      title={movie.title}
-                      posterUrl={movie.posterUrl}
-                      isSelected={i === lib.selectedIndex}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          ))}
-
-          <div className="studio-picks">
-            {data.studioPicks.map((pick) => (
-              <section key={pick.studio} className="studio-section">
-                <h2>{STUDIO_EMOJIS[pick.studio] || ''} {pick.studio}</h2>
-                <MovieCard
-                  title={pick.title || 'Unknown'}
-                  posterUrl={pick.posterUrl}
-                />
-              </section>
-            ))}
-          </div>
-        </main>
-      )}
-    </div>
-  );
-}
+      <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>\n        <h1 className="splash-title">The Game</h1>\n      </div>\n    );\n  }\n\n  return (
+    <div className={`app fade-in${mobileView ? ' mobile' : ''}`}>\n      <header>\n        <h1 className="app-title">The Game</h1>\n        <div className="header-buttons">\n          <button\n            className="view-toggle-btn"\n            onClick={() => setMobileView(!mobileView)}\n            title={mobileView ? 'Desktop view' : 'Mobile view'}\n          >\n            {mobileView ? '\uD83D\uDDA5\uFE0F' : '\uD83D\uDCF1'}\n          </button>\n          <ShuffleButton onClick={shuffle} loading={loading} hasData={!!data} />\n        </div>\n      </header>\n\n      {error && <div className="error-banner">Failed to load: {error}</div>}\n\n      {data && (\n        <main>\n          {data.libraries.map((lib) => (\n            <section key={lib.name} className="library-section">\n              <h2>{LIBRARY_EMOJIS[lib.name] || ''} {lib.name}</h2>\n              {lib.movies.length === 0 ? (\n                <p className="empty-msg">No movies available</p>\n              ) : (\n                <div className="movie-row library-row">\n                  {lib.movies.map((movie, i) => (\n                    <MovieCard\n                      key={\`${lib.name}-${i}\`}\n                      title={movie.title}\n                      posterUrl={movie.posterUrl}\n                      isSelected={i === lib.selectedIndex}\n                    />\n                  ))}\n                </div>\n              )}\n            </section>\n          ))}\n\n          <div className="studio-picks">\n            {data.studioPicks.map((pick) => (\n              <section key={pick.studio} className="studio-section">\n                <h2>{STUDIO_EMOJIS[pick.studio] || ''} {pick.studio}</h2>\n                <MovieCard\n                  title={pick.title || 'Unknown'}\n                  posterUrl={pick.posterUrl}\n                />\n              </section>\n            ))}\n          </div>\n        </main>\n      )}\n    </div>\n  );\n}\n

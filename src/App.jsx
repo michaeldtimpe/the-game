@@ -39,6 +39,24 @@ export default function App() {
   }
 
   useEffect(() => {
+    // Set up keyboard shortcut for re-randomizing
+    const handleKeyDown = (event) => {
+      // Only respond to 'r' key when not focused on text inputs
+      if (event.key === 'r' && !event.target.matches('input, textarea, select')) {
+        event.preventDefault();
+        shuffle();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // Clean up event listener
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
     shuffle();
     const splashTimer = setTimeout(() => {
       setSplashFading(true);

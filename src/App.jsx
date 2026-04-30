@@ -44,7 +44,21 @@ export default function App() {
       setSplashFading(true);
       setTimeout(() => setShowSplash(false), 800);
     }, 4200); // 4.2s hold + 0.8s fade = 5s total
-    return () => clearTimeout(splashTimer);
+
+    function handleKeydown(e) {
+      if (e.key !== 'r') return;
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.target.isContentEditable) return;
+      e.preventDefault();
+      shuffle();
+    }
+
+    document.addEventListener('keydown', handleKeydown);
+    return () => {
+      clearTimeout(splashTimer);
+      document.removeEventListener('keydown', handleKeydown);
+    };
   }, []);
 
   if (showSplash) {

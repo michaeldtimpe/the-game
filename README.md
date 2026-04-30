@@ -12,6 +12,25 @@ Each time you hit **Play**, The Game:
 
 The randomly chosen movie in each library row is highlighted with a white title. Studio picks show posters fetched from TMDB.
 
+## How it Works
+
+The randomization logic lives in **`server.js`**, which exposes the `/api/shuffle` endpoint. The frontend in **`src/App.jsx`** calls this endpoint via the `shuffle()` function (triggered on mount by `useEffect` and on each button click).
+
+### Plex library picks
+
+Each configured Plex library is scanned and its movies are sorted alphabetically by title. The `selectWithNeighbors()` function in `server.js` then:
+
+1. Picks a random `pickedIndex` across the entire sorted list.
+2. Picks a random `positionInGroup` (0–5) to determine where the picked movie appears within the displayed group of 6.
+3. Calculates a `startIndex` so the picked movie lands at that position, clamping to the list boundaries.
+4. Returns the 6-movie slice and the `selectedIndex` (the position of the picked movie within the group).
+
+This mimics the Plex shelf experience: you see a window of 6 alphabetically adjacent titles, with the randomly chosen one highlighted.
+
+### Studio picks
+
+Each curated studio list file (`studio-lists/disney.txt`, `marvel.txt`, `pixar.txt`, `lucasarts.txt`) is loaded into memory at startup. For each studio, a single title is chosen uniformly at random using `Math.floor(Math.random() * titles.length)`. Posters are then fetched from the TMDB API (with caching in `tmdbCache`).
+
 ## Quick Start
 
 ### Local Development

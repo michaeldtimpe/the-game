@@ -47,6 +47,22 @@ export default function App() {
     return () => clearTimeout(splashTimer);
   }, []);
 
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key !== 'r' && e.key !== 'R') return;
+      const target = e.target;
+      const isTextInput =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable;
+      if (isTextInput) return;
+      e.preventDefault();
+      shuffle();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (showSplash) {
     return (
       <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>

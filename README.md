@@ -12,6 +12,26 @@ Each time you hit **Play**, The Game:
 
 The randomly chosen movie in each library row is highlighted with a white title. Studio picks show posters fetched from TMDB.
 
+## How it works
+
+The randomization logic lives in two places:
+
+### Frontend (`src/App.jsx`)
+
+The `shuffle()` function (line 26) is the entry point. It is called once on mount via the `useEffect` hook (line 41) and again whenever the user clicks the **Play** button. It fetches `/api/shuffle` and stores the result in the `data` state, which drives the poster grid rendering.
+
+### Backend (`server.js`)
+
+The `/api/shuffle` endpoint (line 126) performs two independent randomization tasks:
+
+1. **Plex library picks** — For each configured library, the `selectWithNeighbors()` function (line 103) is called with the alphabetically sorted movie list. It:
+   - Picks a random index (`pickedIndex`) from the full sorted list.
+   - Picks a random position within a group of 6 (`positionInGroup`).
+   - Slices a window of 6 movies so that the picked movie appears at the chosen position, clamped to the list boundaries.
+   - Returns the 6-movie window and the index of the picked movie within that window (`selectedIndex`).
+
+2. **Studio picks** — For each studio list file (e.g. `studio-lists/disney.txt`), a random title is chosen with `Math.random()` (line 141), and its poster is fetched from the TMDB API via `getTmdbPoster()` (line 80), which caches results in `tmdbCache` to avoid repeated API calls.
+
 ## Quick Start
 
 ### Local Development

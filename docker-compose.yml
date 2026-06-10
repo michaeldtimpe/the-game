@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  the-game:
+    build: .
+    container_name: the-game
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./studio-lists:/app/studio-lists:ro
+      - ./server.js:/app/server.js:ro
+    network_mode: bridge

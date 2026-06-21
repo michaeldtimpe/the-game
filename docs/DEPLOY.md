@@ -65,7 +65,7 @@ recreate it from `config.example.json` on a fresh checkout.
    curl -s localhost:3000/api/shuffle | head   # Should return JSON
    ```
 
-> **Note:** this NAS is administered through the an MCP admin relay relay (root over the
+> **Note:** this NAS is administered through an MCP admin relay (root over the
 > Tailscale-fronted MCP server). The relay must be brought up before you can run the
 > commands above remotely; see the relay repo. `docker` requires root, so the rebuild
 > runs through the relay rather than the unprivileged SSH account.

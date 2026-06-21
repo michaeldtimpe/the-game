@@ -7,8 +7,10 @@ A movie randomizer web app that picks films from your Plex libraries and curated
 Each time you hit **Play**, The Game:
 
 - Picks a random movie from each of your Plex libraries, then shows it alongside 5 alphabetical neighbors (6 total per library) -- just like scrolling to that spot in Plex
-- Picks one random film each from Disney, Marvel, Pixar, and Lucasarts curated lists
+- Picks one random film each from Disney, Marvel, Pixar, and Lucasarts -- only titles that are **released and currently streamable** (see Studio Lists)
 - Displays everything in a dark-themed poster grid with movie artwork
+
+The randomization is **recency-weighted**: it steers away from spots it just showed you, and away from sections you recently watched in Plex, so repeats are rarer (see Recency Weighting).
 
 The randomly chosen movie in each library row is highlighted with a white title. Studio picks show posters fetched from TMDB.
 
@@ -83,25 +85,42 @@ The `studio-lists/` folder contains curated text files (one movie title per line
 wc -l studio-lists/*.txt
 ```
 
-Edit these files to add or remove titles. Changes take effect on next server restart.
+These curated files are the **base**. On startup (and every 24h, and on `/api/refresh`) the server builds a vetted pool per studio:
+
+1. **Hybrid freshness:** curated titles are merged with newly-released films auto-discovered from TMDB by studio company ID (`studioCompanies` in config). So new releases show up without editing the lists.
+2. **Streamable-only filter:** a title is kept only if it is **released** (release date in the past) **and** has a subscription/flatrate streaming provider in your `region` (default US) per TMDB. This is why unreleased sequels (e.g. `Encanto 2`) never appear even if they're in a list.
+
+Posters are precomputed when the pool is built, so a shuffle makes no TMDB calls. Edit the curated files to add/remove base titles; changes take effect on next restart or `/api/refresh`.
+
+> **Lucasarts** is a small list, so even with anti-repeat weighting it can repeat sooner than the others.
+
+## Recency Weighting
+
+Instead of pure uniform random, each pick is weighted to reduce repeats; weights decay back to normal over subsequent shuffles:
+
+- **Anti-repeat (all libraries + studios):** spots/titles shown in recent shuffles are temporarily down-weighted, so you don't keep landing in the same place.
+- **Recently-watched bias (big libraries only):** the server reads your Plex watch history and steers picks away from the alphabetical sections of titles you watched recently. Skipped for small libraries (e.g. `New`).
+
+No pick is ever made impossible (there's a weight floor). All strengths/radii/decay are tunable under `recency` in config; sane defaults live in `server.js`.
 
 ## Features
 
-- 5-second splash animation on first load
+- 5-second splash animation on first load, with a "Legends Never Die" tagline and an animated gold glow/light-sweep flourish (shows only on first load/reload, not on Play Again)
 - Play Again button to reshuffle without reloading
 - Mobile/desktop view toggle
 - Movie posters from Plex (local) and TMDB (studio picks)
 - Responsive layout with dark Plex-inspired theme
-- TMDB poster caching to avoid rate limits
-- Plex libraries auto-refresh every 24 hours; manual refresh via `/api/refresh`
+- Studio picks auto-stay-current and are filtered to released + streamable titles
+- Recency-weighted randomization to reduce repeats (see Recency Weighting)
+- Plex libraries and studio pools auto-refresh every 24 hours; manual refresh via `/api/refresh`
 - Franchise de-clustering so a single series doesn't fill a whole row (see above)
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/shuffle` | Returns randomized selections for all libraries and studio picks |
-| `GET /api/refresh` | Re-scans Plex libraries and returns updated movie counts |
+| `GET /api/shuffle` | Returns recency-weighted randomized selections for all libraries and studio picks |
+| `GET /api/refresh` | Re-scans Plex libraries, rebuilds the streamable studio pools, and returns updated counts (`counts` + `studioCounts`) |
 
 ## Previous Versions
 

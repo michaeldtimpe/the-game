@@ -72,10 +72,16 @@ recreate it from `config.example.json` on a fresh checkout.
 
 ## Updating data
 
-- **New movies in Plex:** `curl -s localhost:3000/api/refresh` re-scans all libraries with
-  no restart. (Libraries also auto-refresh every 24 h.)
-- **Studio lists:** edit `studio-lists/*.txt` (one title per line). They're mounted read-only,
-  so restart the container to pick up changes: `docker-compose restart the-game`.
+- **New movies in Plex:** `curl -s localhost:3000/api/refresh` re-scans all libraries **and
+  rebuilds the streamable studio pools** with no restart. Returns `{ ok, counts, studioCounts }`.
+  (Both also auto-refresh every 24 h.)
+- **Studio lists:** edit `studio-lists/*.txt` (one title per line) -- these are the curated *base*;
+  the server also auto-discovers new releases from TMDB and filters everything to released +
+  streamable titles. They're mounted read-only, so restart the container (or hit `/api/refresh`)
+  to pick up edits: `docker-compose restart the-game`.
+- **Studio picks look stale/empty:** check `studioCounts` from `/api/refresh` and the logs
+  (`Studio "x": N streamable titles`). Empty pools fall back to curated titles and log a warning
+  (usually a transient TMDB issue or rate-limit).
 - **Add a studio collection or de-cluster another franchise:** see `AGENTS.md`
   (`SORT_PREFIXES` for de-clustering; `studios` array + a new `.txt` for collections).
 

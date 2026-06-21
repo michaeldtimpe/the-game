@@ -27,8 +27,11 @@ The Game is a personal movie randomizer. It picks random movies from Plex librar
 
 ## Architecture Rules
 
-- **No database**. All data is in memory, loaded from Plex API and text files on startup.
-- **No weight system or history tracking**. Pure random selection every time.
+- **No database**. All data is in memory, loaded from Plex API and text files on startup. Recency
+  state (recent picks, Plex watch history) is in-memory only and resets on restart -- no persistence.
+- **Recency-weighted, not pure-random**. Selection is weighted to reduce repeats and steer away from
+  recently-watched sections (see `selectWithNeighborsWeighted` / `applyPenalty` in `server.js` and the
+  Recency Weighting section in `ARCHITECTURE.md`). Keep a weight floor so nothing is ever impossible.
 - **Single Express file**. Don't split `server.js` into modules unless it exceeds ~300 lines.
 - **Single CSS file**. Don't introduce CSS modules, Tailwind, or styled-components.
 - **No state management library**. All state lives in `App.jsx` via `useState`.
@@ -49,22 +52,28 @@ The Game is a personal movie randomizer. It picks random movies from Plex librar
 3. Add an emoji mapping in `LIBRARY_EMOJIS` in `App.jsx`
 
 ### Adding a new studio collection
-1. Create `studio-lists/newstudio.txt` with one title per line
-2. Add `'newstudio'` to the `studios` array in `loadStudioLists()` in `server.js`
-3. Add an emoji mapping in `STUDIO_EMOJIS` in `App.jsx`
+1. Create `studio-lists/newstudio.txt` with one title per line (this is the curated *base*)
+2. Add `'newstudio'` to the `STUDIOS` array near the top of `server.js`
+3. Add its TMDB company ID(s) to `DEFAULT_STUDIO_COMPANIES` (and/or `studioCompanies` in config) so new
+   releases auto-discover; omit it to use the curated list only
+4. Add an emoji mapping in `STUDIO_EMOJIS` in `App.jsx`
 
 ### Updating studio lists
-Edit the `.txt` files directly. One movie title per line. Restart the server (or rebuild the Docker container) for changes to take effect.
+Edit the `.txt` files directly (curated base). One movie title per line. The server merges these with
+TMDB-discovered new releases and filters to released + streamable titles, so a `.txt` title may not
+appear if it isn't streamable. Restart the server, hit `/api/refresh`, or rebuild the container to apply.
 
 ### De-clustering a franchise
 Series whose titles share a long prefix (e.g. "Harry Potter and the ...") sort into one
 alphabetical cluster, so a shuffle pick there fills the whole row with that series. Add the
 shared prefix as a regex to the `SORT_PREFIXES` array in `server.js` -- films then sort by
-their distinctive part. Display titles are unaffected. Rebuild the container to apply.
+their distinctive part. Display titles are unaffected. `server.js` is bind-mounted, so
+`docker-compose restart the-game` applies it (no rebuild).
 
 ### Refreshing Plex data without restart
-Hit `GET /api/refresh` -- this re-scans all Plex libraries. The same scan also runs
-automatically every 24 hours.
+Hit `GET /api/refresh` -- this re-scans all Plex libraries **and rebuilds the streamable studio
+pools**, returning `{ ok, counts, studioCounts }`. The same refresh also runs automatically every
+24 hours.
 
 ## Testing
 
@@ -72,10 +81,10 @@ There are no automated tests. To verify changes:
 
 1. `npm run dev` -- starts backend + Vite
 2. Open `http://localhost:5173`
-3. Confirm splash animation plays (~5 seconds)
+3. Confirm splash animation plays (~5 seconds) with the "Legends Never Die" tagline + glow flourish
 4. Confirm poster grid loads with 6 movies per library row
-5. Confirm studio picks show with TMDB posters
-6. Click "Play Again" -- new selections should appear
+5. Confirm studio picks show with TMDB posters (all released + streamable)
+6. Click "Play Again" -- new selections should appear, splash should NOT replay
 7. Click the mobile toggle -- layout should narrow
 8. `npx vite build` -- confirm production build succeeds
 

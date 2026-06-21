@@ -50,7 +50,10 @@ export default function App() {
   if (showSplash) {
     return (
       <div className={`splash ${splashFading ? 'splash-fade' : ''}`}>
-        <h1 className="splash-title">The Game</h1>
+        <div className="splash-inner">
+          <h1 className="splash-title">The Game</h1>
+          <p className="splash-tagline">Legends Never Die</p>
+        </div>
       </div>
     );
   }

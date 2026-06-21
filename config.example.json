@@ -7,5 +7,33 @@
     { "name": "Movies", "sectionId": 2 },
     { "name": "New", "sectionId": 3 }
   ],
-  "port": 3000
+  "port": 3000,
+
+  "_comment_region": "Region used for TMDB 'available to stream' provider checks and discovery. Optional; defaults to US.",
+  "region": "US",
+
+  "_comment_studioCompanies": "TMDB company IDs used to auto-discover newer films per studio (hybrid freshness). Optional; defaults shown below.",
+  "studioCompanies": {
+    "disney": [2, 6125],
+    "marvel": [420],
+    "pixar": [3],
+    "lucasarts": [1]
+  },
+
+  "_comment_recency": "Anti-repeat / recently-watched bias tuning. All optional; sane defaults are baked into server.js.",
+  "recency": {
+    "gameStrength": 0.9,
+    "gameRadius": 15,
+    "gameDecay": 0.5,
+    "watchStrength": 0.6,
+    "watchRadius": 18,
+    "watchWindowDays": 30,
+    "studioStrength": 0.85,
+    "studioDecay": 0.5,
+    "maxAge": 5,
+    "weightFloor": 0.05,
+    "smallLibThreshold": 50,
+    "historyTtlMs": 300000,
+    "historyLimit": 80
+  }
 }

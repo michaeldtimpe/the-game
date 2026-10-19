@@ -73,15 +73,15 @@ recreate it from `config.example.json` on a fresh checkout.
 ## Updating data
 
 - **New movies in Plex:** `curl -s localhost:3000/api/refresh` re-scans all libraries **and
-  rebuilds the streamable studio pools** with no restart. Returns `{ ok, counts, studioCounts }`.
+  rebuilds the owned studio pools** with no restart. Returns `{ ok, counts, studioCounts }`.
   (Both also auto-refresh every 24 h.)
 - **Studio lists:** edit `studio-lists/*.txt` (one title per line) -- these are the curated *base*;
-  the server also auto-discovers new releases from TMDB and filters everything to released +
-  streamable titles. They're mounted read-only, so restart the container (or hit `/api/refresh`)
+  the server also pulls each studio's TMDB catalogue and keeps only titles we own in Plex. They're mounted read-only, so restart the container (or hit `/api/refresh`)
   to pick up edits: `docker-compose restart the-game`.
 - **Studio picks look stale/empty:** check `studioCounts` from `/api/refresh` and the logs
-  (`Studio "x": N streamable titles`). Empty pools fall back to curated titles and log a warning
-  (usually a transient TMDB issue or rate-limit).
+  (`Studio "x": N owned titles`, `Indexed N owned titles from M Plex movie sections`). An empty
+  pool logs a warning and shows "Unknown" -- usually Plex unreachable at refresh time, or a
+  transient TMDB issue / rate-limit.
 - **Add a studio collection or de-cluster another franchise:** see `AGENTS.md`
   (`SORT_PREFIXES` for de-clustering; `studios` array + a new `.txt` for collections).
 

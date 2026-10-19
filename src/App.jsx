@@ -6,6 +6,7 @@ const LIBRARY_EMOJIS = {
   'New': '\uD83C\uDF7F',
   'Fang': '\uD83D\uDC3A',
   'Floof': '\uD83D\uDC36',
+  'Homework': '\uD83C\uDF93',
 };
 
 const STUDIO_EMOJIS = {

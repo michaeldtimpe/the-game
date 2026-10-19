@@ -7,12 +7,12 @@ A movie randomizer web app that picks films from your Plex libraries and curated
 Each time you hit **Play**, The Game:
 
 - Picks a random movie from each of your Plex libraries, then shows it alongside 5 alphabetical neighbors (6 total per library) -- just like scrolling to that spot in Plex
-- Picks one random film each from Disney, Marvel, Pixar, and Lucasarts -- only titles that are **released and currently streamable** (see Studio Lists)
+- Picks one random film each from Disney, Marvel, Pixar, and Lucasarts -- only titles **we own** in Plex (see Studio Lists)
 - Displays everything in a dark-themed poster grid with movie artwork
 
 The randomization is **recency-weighted**: it steers away from spots it just showed you, and away from sections you recently watched in Plex, so repeats are rarer (see Recency Weighting).
 
-The randomly chosen movie in each library row is highlighted with a white title. Studio picks show posters fetched from TMDB.
+The randomly chosen movie in each library row is highlighted with a white title. Studio picks show the Plex poster of the copy we own (TMDB poster as a fallback).
 
 **Franchise de-clustering:** libraries are browsed in alphabetical order, so a long shared prefix would otherwise bunch a whole series together -- every "Harry Potter and the ..." film sorts under "Ha", so a pick there fills the entire row with Harry Potter. The shuffle instead sorts such titles by their distinctive part (*Chamber of Secrets*, *Goblet of Fire*, *Prisoner of Azkaban* ...), scattering them across the library for a more varied row. The full title is still shown on each card. To de-cluster another series, add its prefix to `SORT_PREFIXES` in `server.js`.
 
@@ -87,10 +87,10 @@ wc -l studio-lists/*.txt
 
 These curated files are the **base**. On startup (and every 24h, and on `/api/refresh`) the server builds a vetted pool per studio:
 
-1. **Hybrid freshness:** curated titles are merged with newly-released films auto-discovered from TMDB by studio company ID (`studioCompanies` in config). So new releases show up without editing the lists.
-2. **Streamable-only filter:** a title is kept only if it is **released** (release date in the past) **and** has a subscription/flatrate streaming provider in your `region` (default US) per TMDB. This is why unreleased sequels (e.g. `Encanto 2`) never appear even if they're in a list.
+1. **Studio catalogue:** curated titles are merged with the studio's films from TMDB by company ID (`studioCompanies` in config), newest first, up to 25 pages (500 titles) per company -- so new releases *and* the back catalogue count without editing the lists.
+2. **Owned-only filter:** a title is kept only if it is **in our collection** -- the server indexes every Plex *movie* section (not just the rows shown, so e.g. a separate Disney section counts) and matches by normalized title, with the year required to agree within one when TMDB knows it. Unowned or unreleased titles never appear, even if they're in a list. Add a film to Plex and it joins the pool on the next refresh.
 
-Posters are precomputed when the pool is built, so a shuffle makes no TMDB calls. Edit the curated files to add/remove base titles; changes take effect on next restart or `/api/refresh`.
+Posters are precomputed when the pool is built, so a shuffle makes no Plex or TMDB calls. Edit the curated files to add/remove base titles; changes take effect on next restart or `/api/refresh`.
 
 > **Lucasarts** is a small list, so even with anti-repeat weighting it can repeat sooner than the others.
 
@@ -110,7 +110,7 @@ No pick is ever made impossible (there's a weight floor). All strengths/radii/de
 - Mobile/desktop view toggle
 - Movie posters from Plex (local) and TMDB (studio picks)
 - Responsive layout with dark Plex-inspired theme
-- Studio picks auto-stay-current and are filtered to released + streamable titles
+- Studio picks auto-stay-current and are filtered to titles we own in Plex
 - Recency-weighted randomization to reduce repeats (see Recency Weighting)
 - Plex libraries and studio pools auto-refresh every 24 hours; manual refresh via `/api/refresh`
 - Franchise de-clustering so a single series doesn't fill a whole row (see above)
@@ -120,7 +120,7 @@ No pick is ever made impossible (there's a weight floor). All strengths/radii/de
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/shuffle` | Returns recency-weighted randomized selections for all libraries and studio picks |
-| `GET /api/refresh` | Re-scans Plex libraries, rebuilds the streamable studio pools, and returns updated counts (`counts` + `studioCounts`) |
+| `GET /api/refresh` | Re-scans Plex libraries and the owned-movie index, rebuilds the studio pools, and returns updated counts (`counts` + `studioCounts`) |
 
 ## Previous Versions
 

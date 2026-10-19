@@ -60,8 +60,8 @@ The Game is a personal movie randomizer. It picks random movies from Plex librar
 
 ### Updating studio lists
 Edit the `.txt` files directly (curated base). One movie title per line. The server merges these with
-TMDB-discovered new releases and filters to released + streamable titles, so a `.txt` title may not
-appear if it isn't streamable. Restart the server, hit `/api/refresh`, or rebuild the container to apply.
+the studio's TMDB catalogue and filters to titles we own in Plex (any movie section), so a `.txt` title
+won't appear until it's in the collection. Restart the server, hit `/api/refresh`, or rebuild the container to apply.
 
 ### De-clustering a franchise
 Series whose titles share a long prefix (e.g. "Harry Potter and the ...") sort into one
@@ -71,8 +71,8 @@ their distinctive part. Display titles are unaffected. `server.js` is bind-mount
 `docker-compose restart the-game` applies it (no rebuild).
 
 ### Refreshing Plex data without restart
-Hit `GET /api/refresh` -- this re-scans all Plex libraries **and rebuilds the streamable studio
-pools**, returning `{ ok, counts, studioCounts }`. The same refresh also runs automatically every
+Hit `GET /api/refresh` -- this re-scans all Plex libraries, re-indexes owned movies, **and rebuilds
+the studio pools**, returning `{ ok, counts, studioCounts }`. The same refresh also runs automatically every
 24 hours.
 
 ## Testing
@@ -83,7 +83,7 @@ There are no automated tests. To verify changes:
 2. Open `http://localhost:5173`
 3. Confirm splash animation plays (~5 seconds) with the "Legends Never Die" tagline + glow flourish
 4. Confirm poster grid loads with 6 movies per library row
-5. Confirm studio picks show with TMDB posters (all released + streamable)
+5. Confirm studio picks show with posters (all owned in Plex; check `studioCounts` from `/api/refresh`)
 6. Click "Play Again" -- new selections should appear, splash should NOT replay
 7. Click the mobile toggle -- layout should narrow
 8. `npx vite build` -- confirm production build succeeds

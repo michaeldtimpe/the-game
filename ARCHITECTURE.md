@@ -24,7 +24,7 @@ A single Express file with no external dependencies beyond Express itself.
 2. Read studio `.txt` files from `studio-lists/` into memory arrays
 3. Fetch all movies from each configured Plex library section via the Plex API
 4. Sort each library alphabetically by a **sort key** that strips known franchise prefixes (see Franchise De-clustering)
-5. Build the **streamable studio pools** from curated lists + TMDB auto-discovery (see Studio Pools)
+5. Index every Plex movie section (`ownedMovies`) and build the **owned studio pools** from curated lists + TMDB studio catalogues (see Studio Pools)
 6. Start Express on the configured port
 7. Schedule a background re-scan of all Plex libraries and a studio-pool rebuild every 24 hours
 
@@ -33,9 +33,10 @@ A single Express file with no external dependencies beyond Express itself.
 ```
 plexLibraries:     Map<sectionId, { name, movies: [{ title, posterUrl }] }>
 studioLists:       { disney: [titles], ... }            // curated base, from .txt
-studioStreamable:  { disney: [{ title, posterUrl }], ... } // vetted: released + streamable
+ownedMovies:       Map<normalizedTitle, [{ year, posterUrl }]> // every Plex movie section
+studioPools:       { disney: [{ title, posterUrl }], ... } // vetted: owned in Plex
 tmdbResolveCache:  Map<normalizedTitle, { id, releaseDate, posterPath } | null>
-tmdbProviderCache: Map<tmdbId, boolean>                 // cleared on each pool rebuild
+tmdbMetaCache:     Map<tmdbId, { runtime, isDocumentary }>
 recentLibPicks:    Map<sectionId, [{ index, age }]>     // anti-repeat state
 recentStudioPicks: { disney: [{ title, age }], ... }    // anti-repeat state
 watchHistory:      { fetchedAt, bySection: Map<sectionId, Map<title, viewedAt>> }
@@ -66,14 +67,15 @@ This means the user sees a realistic alphabetical cluster of movies, and the act
 
 ### Studio Pools
 
-`buildStudioPool(studio)` produces `studioStreamable[studio]`, a pre-vetted list of `{ title, posterUrl }`:
+`buildStudioPool(studio)` produces `studioPools[studio]`, a pre-vetted list of `{ title, posterUrl }`:
 
 1. **Base:** curated titles from `studio-lists/<studio>.txt`.
-2. **Auto-discover:** newer films from each studio's TMDB company IDs (`/discover/movie?with_companies=...&primary_release_date.lte=today`), de-duped against the curated titles.
-3. **Filter:** each candidate is resolved to a TMDB id (`tmdbResolveCache`) and kept only if **released** and **streamable** (non-empty regional `flatrate` provider, `tmdbProviderCache`).
-4. **Fallback:** if a pool comes back empty (e.g. TMDB outage), it falls back to the raw curated titles so the row is never blank.
+2. **Catalogue:** each studio's films from its TMDB company IDs (`/discover/movie?with_companies=...&primary_release_date.lte=today`, newest first, up to `MAX_DISCOVER_PAGES` = 25 pages per company), de-duped against the curated titles.
+3. **Owned filter:** `scanOwnedMovies()` first indexes every Plex section of type `movie` (title and original title, normalized). A candidate is kept only if `findOwned(title, releaseDate)` finds it -- same normalized title, and year within one when TMDB resolved a release date (`tmdbResolveCache`). Curated titles TMDB can't resolve still count by title alone.
+4. **Feature gate (discovered titles only):** documentaries and anything under 40 minutes are dropped (`tmdbMetaCache`), so owned featurettes don't sneak in.
+5. **Poster:** the owned copy's Plex poster, falling back to TMDB's.
 
-Because posters are baked into the pool, `/api/shuffle` makes **zero** TMDB calls. The pool is rebuilt at startup, every 24h, and on `/api/refresh`; `tmdbProviderCache` is cleared on each rebuild so streaming availability stays current. Lookups are concurrency-limited (`mapLimit`) to stay friendly to TMDB.
+If a pool comes back empty it stays empty and logs a warning (the studio row then shows "Unknown") -- it never falls back to titles we don't own. Because posters are baked into the pool, `/api/shuffle` makes **zero** Plex or TMDB calls. The index and pools are rebuilt at startup, every 24h, and on `/api/refresh`. Lookups are concurrency-limited (`mapLimit`) to stay friendly to TMDB.
 
 ### Franchise De-clustering
 
@@ -93,7 +95,7 @@ To avoid this, libraries are sorted by `sortKey(title)` rather than the raw titl
 
 ### TMDB Caching
 
-Two caches back the studio pools: `tmdbResolveCache` (normalized title -> `{ id, releaseDate, posterPath }`, persists for the process lifetime since ids/dates are stable) and `tmdbProviderCache` (tmdb id -> streamable boolean, **cleared on each pool rebuild** so daily streaming changes propagate). Because pools are precomputed, individual shuffles make zero TMDB calls.
+Two caches back the studio pools, both for the process lifetime since the data is stable: `tmdbResolveCache` (normalized title -> `{ id, releaseDate, posterPath }`) and `tmdbMetaCache` (tmdb id -> `{ runtime, isDocumentary }`; failed lookups aren't cached, so they retry on the next rebuild). Because pools are precomputed, individual shuffles make zero TMDB calls.
 
 ### Static File Serving
 

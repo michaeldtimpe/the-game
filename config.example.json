@@ -9,10 +9,10 @@
   ],
   "port": 3000,
 
-  "_comment_region": "Region used for TMDB 'available to stream' provider checks and discovery. Optional; defaults to US.",
+  "_comment_region": "Region used for TMDB studio discovery (release dates). Optional; defaults to US.",
   "region": "US",
 
-  "_comment_studioCompanies": "TMDB company IDs used to auto-discover newer films per studio (hybrid freshness). Optional; defaults shown below.",
+  "_comment_studioCompanies": "TMDB company IDs whose catalogue is matched against what we own in Plex. Optional; defaults shown below.",
   "studioCompanies": {
     "disney": [2, 6125],
     "marvel": [420],

@@ -137,6 +137,13 @@ function sortKey(title) {
 
 // --- Plex API ---
 
+// Posters go to the browser as /api/poster?thumb=<plex thumb path>; the server fetches them
+// from Plex with the token in a header, so the Plex token never reaches a client.
+const THUMB_RE = /^\/library\/metadata\/\d+\/(thumb|art)\/\d+$/;
+function posterPath(thumb) {
+  return thumb && THUMB_RE.test(thumb) ? `/api/poster?thumb=${encodeURIComponent(thumb)}` : null;
+}
+
 async function fetchPlexLibrary(sectionId, name) {
   const url = `${plexUrl}/library/sections/${sectionId}/all?X-Plex-Token=${plexToken}`;
   try {
@@ -149,7 +156,7 @@ async function fetchPlexLibrary(sectionId, name) {
       .filter(m => m.type === 'movie')
       .map(m => ({
         title: m.title,
-        posterUrl: m.thumb ? `${plexUrl}${m.thumb}?X-Plex-Token=${plexToken}` : null
+        posterUrl: posterPath(m.thumb)
       }))
       .sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title), undefined, { sensitivity: 'base' }));
     plexLibraries.set(sectionId, { name, movies });
@@ -180,7 +187,7 @@ async function scanOwnedMovies() {
         if (m.type !== 'movie') continue;
         const entry = {
           year: m.year ?? null,
-          posterUrl: m.thumb ? `${plexUrl}${m.thumb}?X-Plex-Token=${plexToken}` : null,
+          posterUrl: posterPath(m.thumb),
         };
         for (const t of new Set([m.title, m.originalTitle].filter(Boolean).map(normalizeTitle))) {
           if (!next.has(t)) next.set(t, []);
@@ -524,6 +531,21 @@ app.get('/api/shuffle', async (req, res) => {
   });
 
   res.json({ libraries: libraryResults, studioPicks });
+});
+
+app.get('/api/poster', async (req, res) => {
+  const thumb = String(req.query.thumb || '');
+  if (!THUMB_RE.test(thumb)) return res.status(400).json({ error: 'bad thumb' });
+  try {
+    const r = await fetch(`${plexUrl}${thumb}`, { headers: { 'X-Plex-Token': plexToken } });
+    if (!r.ok) return res.status(r.status === 404 ? 404 : 502).end();
+    res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (err) {
+    console.error('Poster fetch failed:', err.message);
+    res.status(502).end();
+  }
 });
 
 app.get('/api/refresh', async (req, res) => {

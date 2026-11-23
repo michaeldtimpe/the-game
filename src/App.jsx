@@ -7,13 +7,11 @@ const LIBRARY_EMOJIS = {
   'Fang': '\uD83D\uDC3A',
   'Floof': '\uD83D\uDC36',
   'Homework': '\uD83C\uDF93',
+  'House of Mouse': '\uD83D\uDC2D',
 };
 
 const STUDIO_EMOJIS = {
-  'Disney': '\uD83D\uDC2D',
   'Marvel': '\uD83E\uDDB8',
-  'Pixar': '\uD83D\uDE80',
-  'Lucasarts': '\u2B50',
 };
 
 export default function App() {

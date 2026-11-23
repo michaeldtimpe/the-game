@@ -5,7 +5,8 @@
   "libraries": [
     { "name": "Cinema", "sectionId": 1 },
     { "name": "Movies", "sectionId": 2 },
-    { "name": "New", "sectionId": 3 }
+    { "name": "New", "sectionId": 3 },
+    { "name": "House of Mouse", "sectionId": 5 }
   ],
   "port": 3000,
 
@@ -14,10 +15,7 @@
 
   "_comment_studioCompanies": "TMDB company IDs whose catalogue is matched against what we own in Plex. Optional; defaults shown below.",
   "studioCompanies": {
-    "disney": [2, 6125],
-    "marvel": [420],
-    "pixar": [3],
-    "lucasarts": [1]
+    "marvel": [420]
   },
 
   "_comment_recency": "Anti-repeat / recently-watched bias tuning. All optional; sane defaults are baked into server.js.",

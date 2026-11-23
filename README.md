@@ -7,7 +7,8 @@ A movie randomizer web app that picks films from your Plex libraries and curated
 Each time you hit **Play**, The Game:
 
 - Picks a random movie from each of your Plex libraries, then shows it alongside 5 alphabetical neighbors (6 total per library) -- just like scrolling to that spot in Plex
-- Picks one random film each from Disney, Marvel, Pixar, and Lucasarts -- only titles **we own** in Plex (see Studio Lists)
+- **House of Mouse** row: six picks from the Plex "mouse movies" section (Disney, Pixar, Star Wars and the rest of the mouse films), weighted like any other library row
+- Picks one random Marvel film -- only titles **we own** in Plex (see Studio Lists)
 - Displays everything in a dark-themed poster grid with movie artwork
 
 The randomization is **recency-weighted**: it steers away from spots it just showed you, and away from sections you recently watched in Plex, so repeats are rarer (see Recency Weighting).
@@ -79,7 +80,7 @@ Copy `config.example.json` to `config.json`:
 
 ## Studio Lists
 
-The `studio-lists/` folder contains curated text files (one movie title per line) for Disney, Marvel, Pixar, and Lucasarts. For current per-file counts:
+The `studio-lists/` folder contains curated text files (one movie title per line); currently just Marvel, since Disney, Pixar and Lucasfilm moved to the House of Mouse library row. For current per-file counts:
 
 ```bash
 wc -l studio-lists/*.txt
@@ -88,11 +89,9 @@ wc -l studio-lists/*.txt
 These curated files are the **base**. On startup (and every 24h, and on `/api/refresh`) the server builds a vetted pool per studio:
 
 1. **Studio catalogue:** curated titles are merged with the studio's films from TMDB by company ID (`studioCompanies` in config), newest first, up to 25 pages (500 titles) per company -- so new releases *and* the back catalogue count without editing the lists.
-2. **Owned-only filter:** a title is kept only if it is **in our collection** -- the server indexes every Plex *movie* section (not just the rows shown, so e.g. a separate Disney section counts) and matches by normalized title, with the year required to agree within one when TMDB knows it. Unowned or unreleased titles never appear, even if they're in a list. Add a film to Plex and it joins the pool on the next refresh.
+2. **Owned-only filter:** a title is kept only if it is **in our collection** -- the server indexes every Plex *movie* section (not just the rows shown, so e.g. a section not shown as a row counts) and matches by normalized title, with the year required to agree within one when TMDB knows it. Unowned or unreleased titles never appear, even if they're in a list. Add a film to Plex and it joins the pool on the next refresh.
 
 Posters are precomputed when the pool is built, so a shuffle makes no Plex or TMDB calls. Edit the curated files to add/remove base titles; changes take effect on next restart or `/api/refresh`.
-
-> **Lucasarts** is a small list, so even with anti-repeat weighting it can repeat sooner than the others.
 
 ## Recency Weighting
 

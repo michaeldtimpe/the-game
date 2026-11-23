@@ -6,15 +6,12 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-const STUDIOS = ['disney', 'marvel', 'pixar', 'lucasarts'];
+const STUDIOS = ['marvel'];
 
 // TMDB company IDs used to auto-discover newer films per studio (hybrid freshness):
-// Walt Disney Pictures + Walt Disney Animation Studios, Marvel Studios, Pixar, Lucasfilm.
+// Marvel Studios. (Disney, Pixar and Lucasfilm films are the "House of Mouse" library row.)
 const DEFAULT_STUDIO_COMPANIES = {
-  disney: [2, 6125],
   marvel: [420],
-  pixar: [3],
-  lucasarts: [1],
 };
 
 // Quality gates for AUTO-DISCOVERED titles (curated titles are exempt — they're
@@ -172,7 +169,7 @@ async function scanAllPlexLibraries() {
 }
 
 // Index every movie we own, across all Plex movie sections (not just the ones shown
-// as rows -- e.g. the Disney "mouse films" section counts too). Studio pools are
+// as rows -- e.g. a section not shown as a row still counts). Studio pools are
 // filtered against this, so studio picks are always something we can actually play.
 async function scanOwnedMovies() {
   try {

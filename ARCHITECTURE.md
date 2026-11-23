@@ -32,13 +32,13 @@ A single Express file with no external dependencies beyond Express itself.
 
 ```
 plexLibraries:     Map<sectionId, { name, movies: [{ title, posterUrl }] }>
-studioLists:       { disney: [titles], ... }            // curated base, from .txt
+studioLists:       { marvel: [titles], ... }            // curated base, from .txt
 ownedMovies:       Map<normalizedTitle, [{ year, posterUrl }]> // every Plex movie section
-studioPools:       { disney: [{ title, posterUrl }], ... } // vetted: owned in Plex
+studioPools:       { marvel: [{ title, posterUrl }], ... } // vetted: owned in Plex
 tmdbResolveCache:  Map<normalizedTitle, { id, releaseDate, posterPath } | null>
 tmdbMetaCache:     Map<tmdbId, { runtime, isDocumentary }>
 recentLibPicks:    Map<sectionId, [{ index, age }]>     // anti-repeat state
-recentStudioPicks: { disney: [{ title, age }], ... }    // anti-repeat state
+recentStudioPicks: { marvel: [{ title, age }], ... }    // anti-repeat state
 watchHistory:      { fetchedAt, bySection: Map<sectionId, Map<title, viewedAt>> }
 ```
 

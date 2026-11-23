@@ -54,7 +54,9 @@ The Game is a personal movie randomizer. It picks random movies from Plex librar
 Series whose titles share a long prefix (e.g. "Harry Potter and the ...") sort into one
 alphabetical cluster, so a shuffle pick there fills the whole row with that series. Add the
 shared prefix as a regex to the `SORT_PREFIXES` array in `server.js` -- films then sort by
-their distinctive part. Display titles are unaffected. `server.js` is bind-mounted, so
+their distinctive part. Display titles are unaffected. A bare sequel number left after
+stripping is spelled out (`SEQUEL_WORDS`), so sequels don't pile up at the top. Most House of Mouse
+franchises are already listed; check a library by counting 6-film windows with 3+ of one series. `server.js` is bind-mounted, so
 `docker-compose restart the-game` applies it (no rebuild).
 
 ### Refreshing Plex data without restart

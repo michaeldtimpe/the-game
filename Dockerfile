@@ -14,6 +14,9 @@ RUN apk add --no-cache ca-certificates && \
     sed -i -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
            -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' /etc/ca-certificates.conf && \
     update-ca-certificates
+# Use the trimmed system store, not Node's compiled-in list, so a rebuild on a
+# stale cached base cannot bring the compromised roots back.
+ENV NODE_OPTIONS=--use-openssl-ca
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev

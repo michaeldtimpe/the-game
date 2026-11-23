@@ -61,11 +61,42 @@ function normalizeTitle(t) {
 // still what gets displayed -- this only affects sort/clustering order.
 const SORT_PREFIXES = [
   /^harry potter and the /i,
+  // House of Mouse is mostly franchises; without these a pick fills the row with one series.
+  /^star wars:\s*(episode [ivx]+\s*-\s*)?/i,
+  /^spider-man:?\s*/i,
+  /^x-men:?\s*/i,
+  /^captain america:\s*/i,
+  /^pirates of the caribbean:\s*/i,
+  /^toy story\s*/i,
+  /^avengers:\s*/i,
+  /^(the )?guardians of the galaxy:?\s*/i,
+  /^indiana jones and the\s*/i,
+  /^thor:\s*/i,
+  /^ant-man( and the wasp)?:?\s*/i,
+  /^iron man\s*/i,
+  /^cars\s*/i,
+  /^deadpool\s*/i,
+  /^tron:\s*/i,
+  /^black panther:\s*/i,
+  /^(the )?muppets?\s*/i,
+  /^doctor strange\s*/i,
+  /^monsters,?\s*/i,
+  /^finding\s*/i,
+  /^frozen\s*/i,
+  /^moana\s*/i,
+  /^zootopia\s*/i,
 ];
+
+// A bare sequel number left after stripping ("Toy Story 3" -> "3") would pile every
+// franchise's sequels together at the top of the library, so spell it out instead.
+const SEQUEL_WORDS = { '2': 'two', 'ii': 'two', '3': 'three', '4': 'four', '5': 'five' };
 
 function sortKey(title) {
   for (const prefix of SORT_PREFIXES) {
-    if (prefix.test(title)) return title.replace(prefix, '');
+    if (!prefix.test(title)) continue;
+    const rest = title.replace(prefix, '').trim();
+    if (!rest) return title; // the franchise's first film keeps its own title
+    return SEQUEL_WORDS[rest.toLowerCase()] || rest;
   }
   return title;
 }

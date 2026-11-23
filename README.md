@@ -1,6 +1,6 @@
 # The Game
 
-A movie randomizer web app that picks films from your Plex libraries and curated studio collections, displaying them in a visual poster grid that emulates the Plex shelf browsing experience.
+A movie randomizer web app that picks films from your Plex libraries, displaying them in a visual poster grid that emulates the Plex shelf browsing experience.
 
 ## What It Does
 
@@ -8,12 +8,11 @@ Each time you hit **Play**, The Game:
 
 - Picks a random movie from each of your Plex libraries, then shows it alongside 5 alphabetical neighbors (6 total per library) -- just like scrolling to that spot in Plex
 - **House of Mouse** row: six picks from the Plex "mouse movies" section (Disney, Pixar, Star Wars and the rest of the mouse films), weighted like any other library row
-- Picks one random Marvel film -- only titles **we own** in Plex (see Studio Lists)
 - Displays everything in a dark-themed poster grid with movie artwork
 
 The randomization is **recency-weighted**: it steers away from spots it just showed you, and away from sections you recently watched in Plex, so repeats are rarer (see Recency Weighting).
 
-The randomly chosen movie in each library row is highlighted with a white title. Studio picks show the Plex poster of the copy we own (TMDB poster as a fallback).
+The randomly chosen movie in each library row is highlighted with a white title.
 
 **Franchise de-clustering:** libraries are browsed in alphabetical order, so a long shared prefix would otherwise bunch a whole series together -- every "Harry Potter and the ..." film sorts under "Ha", so a pick there fills the entire row with Harry Potter. The shuffle instead sorts such titles by their distinctive part (*Chamber of Secrets*, *Goblet of Fire*, *Prisoner of Azkaban* ...), scattering them across the library for a more varied row. The full title is still shown on each card. To de-cluster another series, add its prefix to `SORT_PREFIXES` in `server.js`.
 
@@ -27,7 +26,7 @@ npm install
 
 # Copy and configure
 cp config.example.json config.json
-# Edit config.json with your Plex URL, token, TMDB key, and library section IDs
+# Edit config.json with your Plex URL, token, and library section IDs
 
 # Run in dev mode (backend + Vite hot reload)
 npm run dev
@@ -60,9 +59,8 @@ Copy `config.example.json` to `config.json`:
 
 ```json
 {
-  "plexUrl": "http://192.168.100.47:32400",
+  "plexUrl": "http://YOUR_PLEX_IP:32400",
   "plexToken": "YOUR_PLEX_TOKEN",
-  "tmdbApiKey": "YOUR_TMDB_API_KEY",
   "libraries": [
     { "name": "New", "sectionId": 1 },
     { "name": "Fang", "sectionId": 2 },
@@ -75,29 +73,13 @@ Copy `config.example.json` to `config.json`:
 **Finding your values:**
 
 - **Plex Token**: In Plex Web, open any media > Get Info > View XML. The `X-Plex-Token` is in the URL.
-- **TMDB API Key**: Free at [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api)
 - **Library Section IDs**: Visit `http://YOUR_PLEX:32400/library/sections?X-Plex-Token=TOKEN` -- the `key` attribute on each `<Directory>` is the section ID.
-
-## Studio Lists
-
-The `studio-lists/` folder contains curated text files (one movie title per line); currently just Marvel, since Disney, Pixar and Lucasfilm moved to the House of Mouse library row. For current per-file counts:
-
-```bash
-wc -l studio-lists/*.txt
-```
-
-These curated files are the **base**. On startup (and every 24h, and on `/api/refresh`) the server builds a vetted pool per studio:
-
-1. **Studio catalogue:** curated titles are merged with the studio's films from TMDB by company ID (`studioCompanies` in config), newest first, up to 25 pages (500 titles) per company -- so new releases *and* the back catalogue count without editing the lists.
-2. **Owned-only filter:** a title is kept only if it is **in our collection** -- the server indexes every Plex *movie* section (not just the rows shown, so e.g. a section not shown as a row counts) and matches by normalized title, with the year required to agree within one when TMDB knows it. Unowned or unreleased titles never appear, even if they're in a list. Add a film to Plex and it joins the pool on the next refresh.
-
-Posters are precomputed when the pool is built, so a shuffle makes no Plex or TMDB calls. Edit the curated files to add/remove base titles; changes take effect on next restart or `/api/refresh`.
 
 ## Recency Weighting
 
 Instead of pure uniform random, each pick is weighted to reduce repeats; weights decay back to normal over subsequent shuffles:
 
-- **Anti-repeat (all libraries + studios):** spots/titles shown in recent shuffles are temporarily down-weighted, so you don't keep landing in the same place.
+- **Anti-repeat (all libraries):** spots shown in recent shuffles are temporarily down-weighted, so you don't keep landing in the same place.
 - **Recently-watched bias (big libraries only):** the server reads your Plex watch history and steers picks away from the alphabetical sections of titles you watched recently. Skipped for small libraries (e.g. `New`).
 
 No pick is ever made impossible (there's a weight floor). All strengths/radii/decay are tunable under `recency` in config; sane defaults live in `server.js`.
@@ -107,19 +89,18 @@ No pick is ever made impossible (there's a weight floor). All strengths/radii/de
 - 5-second splash animation on first load, with a "Legends Never Die" tagline and an animated gold glow/light-sweep flourish (shows only on first load/reload, not on Play Again)
 - Play Again button to reshuffle without reloading
 - Mobile/desktop view toggle
-- Movie posters from Plex (local) and TMDB (studio picks)
+- Movie posters from Plex, proxied through the server (`/api/poster`) so the token stays server-side
 - Responsive layout with dark Plex-inspired theme
-- Studio picks auto-stay-current and are filtered to titles we own in Plex
 - Recency-weighted randomization to reduce repeats (see Recency Weighting)
-- Plex libraries and studio pools auto-refresh every 24 hours; manual refresh via `/api/refresh`
+- Plex libraries auto-refresh every 24 hours; manual refresh via `/api/refresh`
 - Franchise de-clustering so a single series doesn't fill a whole row (see above)
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/shuffle` | Returns recency-weighted randomized selections for all libraries and studio picks |
-| `GET /api/refresh` | Re-scans Plex libraries and the owned-movie index, rebuilds the studio pools, and returns updated counts (`counts` + `studioCounts`) |
+| `GET /api/shuffle` | Returns recency-weighted randomized selections for all libraries |
+| `GET /api/refresh` | Re-scans Plex libraries and returns updated per-library counts (`counts`) |
 
 ## Previous Versions
 

@@ -10,9 +10,6 @@ const LIBRARY_EMOJIS = {
   'House of Mouse': '\uD83D\uDC2D',
 };
 
-const STUDIO_EMOJIS = {
-  'Marvel': '\uD83E\uDDB8',
-};
 
 export default function App() {
   const [data, setData] = useState(null);
@@ -96,18 +93,6 @@ export default function App() {
               )}
             </section>
           ))}
-
-          <div className="studio-picks">
-            {data.studioPicks.map((pick) => (
-              <section key={pick.studio} className="studio-section">
-                <h2>{STUDIO_EMOJIS[pick.studio] || ''} {pick.studio}</h2>
-                <MovieCard
-                  title={pick.title || 'Unknown'}
-                  posterUrl={pick.posterUrl}
-                />
-              </section>
-            ))}
-          </div>
         </main>
       )}
     </div>

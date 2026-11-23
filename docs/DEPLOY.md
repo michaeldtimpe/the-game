@@ -16,11 +16,11 @@ Synology NAS.
 
 The Dockerfile is a two-stage build:
 
-1. **build stage** (`node:20-alpine`) runs `vite build` to produce `dist/`.
-2. **production stage** copies `dist/`, `server.js`, and `studio-lists/`, then runs
+1. **build stage** (`node:22-alpine`) runs `vite build` to produce `dist/`.
+2. **production stage** copies `dist/` and `server.js`, then runs
    `node server.js`.
 
-`config.json`, `studio-lists/`, and `server.js` are bind-mounted read-only from the project
+`config.json` and `server.js` are bind-mounted read-only from the project
 dir, so changes to them apply with a `docker-compose restart` -- no rebuild. Only the
 **built frontend (`dist/`) is baked into the image**, so a rebuild is needed only for
 frontend (`src/`) changes. (`server.js` is also `COPY`ed into the image as a fallback for
@@ -31,11 +31,11 @@ running without the mount.)
 ```bash
 cd /volume1/docker/the-game
 cp config.example.json config.json
-# edit config.json: plexUrl, plexToken, tmdbApiKey, libraries[], port
+# edit config.json: plexUrl, plexToken, libraries[], port
 docker-compose up -d --build
 ```
 
-`config.json` holds the Plex token and TMDB key. It is **gitignored and never committed** --
+`config.json` holds the Plex token. It is **gitignored and never committed** --
 recreate it from `config.example.json` on a fresh checkout.
 
 ## Deploying a code or docs change
@@ -47,7 +47,7 @@ recreate it from `config.example.json` on a fresh checkout.
 
    ```bash
    cd /volume1/docker/the-game
-   # Backend (server.js), config.json, or studio-lists -- mounted, no rebuild:
+   # Backend (server.js) or config.json -- mounted, no rebuild:
    docker-compose restart the-game
    # Frontend (src/ -> dist) changes -- rebuild the image:
    docker-compose up -d --build
@@ -72,18 +72,10 @@ recreate it from `config.example.json` on a fresh checkout.
 
 ## Updating data
 
-- **New movies in Plex:** `curl -s localhost:3000/api/refresh` re-scans all libraries **and
-  rebuilds the owned studio pools** with no restart. Returns `{ ok, counts, studioCounts }`.
-  (Both also auto-refresh every 24 h.)
-- **Studio lists:** edit `studio-lists/*.txt` (one title per line) -- these are the curated *base*;
-  the server also pulls each studio's TMDB catalogue and keeps only titles we own in Plex. They're mounted read-only, so restart the container (or hit `/api/refresh`)
-  to pick up edits: `docker-compose restart the-game`.
-- **Studio picks look stale/empty:** check `studioCounts` from `/api/refresh` and the logs
-  (`Studio "x": N owned titles`, `Indexed N owned titles from M Plex movie sections`). An empty
-  pool logs a warning and shows "Unknown" -- usually Plex unreachable at refresh time, or a
-  transient TMDB issue / rate-limit.
-- **Add a studio collection or de-cluster another franchise:** see `AGENTS.md`
-  (`SORT_PREFIXES` for de-clustering; `studios` array + a new `.txt` for collections).
+- **New movies in Plex:** `curl -s localhost:3000/api/refresh` re-scans all libraries with no
+  restart. Returns `{ ok, counts }`. (Also auto-refreshes every 24 h.)
+- **Add a library row or de-cluster another franchise:** see `AGENTS.md`
+  (`libraries` in config + `LIBRARY_EMOJIS`; `SORT_PREFIXES` for de-clustering).
 
 ## Troubleshooting
 
@@ -91,9 +83,8 @@ recreate it from `config.example.json` on a fresh checkout.
 |---------|-------|
 | Page won't load | `docker ps --filter name=the-game`; `docker logs --tail 50 the-game` |
 | Empty library rows | Logs show `Failed to load Plex library ...` -> bad `plexUrl`/`plexToken` or Plex down |
-| Studio posters missing | TMDB lookup failing -> check `tmdbApiKey`; TMDB free tier rate limits |
 | Config errors on boot | `Missing config.json` in logs -> the bind mount path / file is wrong |
-| Change didn't take effect | Backend/config/studio-list changes need a `restart` (they're mounted); frontend (`src/`) changes need `--build` |
+| Change didn't take effect | Backend/config changes need a `restart` (they're mounted); frontend (`src/`) changes need `--build` |
 | CM shows `<id>_the-game`, "doesn't exist but running" | Stale Container Manager record after a CLI `--build` recreate. The real container is fine; restart the Container Manager package (Package Center) to clear it. Note the MCP admin relay is `restart=no`, so it won't auto-restart -- bring it back with `relay.sh <nas> up`. |
 
 ## Backup

@@ -4,7 +4,7 @@ Guidelines for AI agents (Claude Code, Copilot, etc.) working on this project.
 
 ## Project Context
 
-The Game is a personal movie randomizer. It picks random movies from Plex libraries and curated studio lists, displaying them in a visual poster grid. There is no database, no user authentication, no multi-tenancy. Keep it simple.
+The Game is a personal movie randomizer. It picks random movies from Plex libraries (including the "House of Mouse" row, Plex section 5), displaying them in a visual poster grid. There is no database, no user authentication, no multi-tenancy. Keep it simple.
 
 ## Tech Stack
 
@@ -17,13 +17,12 @@ The Game is a personal movie randomizer. It picks random movies from Plex librar
 
 | File | Purpose |
 |------|---------|
-| `server.js` | Express backend -- Plex API, TMDB API, shuffle logic, static serving |
+| `server.js` | Express backend -- Plex API, shuffle logic, poster proxy, static serving |
 | `src/App.jsx` | Main React component -- all state, layout, section rendering |
 | `src/App.css` | All styles -- dark theme, grid layout, animations, mobile toggle |
 | `src/components/MovieCard.jsx` | Reusable poster card with fallback and selected highlight |
 | `src/components/ShuffleButton.jsx` | Play / Play Again button |
-| `config.json` | Runtime config (gitignored) -- Plex URL/token, TMDB key, library IDs |
-| `studio-lists/*.txt` | Curated movie title lists, one per line |
+| `config.json` | Runtime config (gitignored) -- Plex URL/token, library IDs |
 
 ## Architecture Rules
 
@@ -51,18 +50,6 @@ The Game is a personal movie randomizer. It picks random movies from Plex librar
 2. Add an entry to `config.json` under `libraries`
 3. Add an emoji mapping in `LIBRARY_EMOJIS` in `App.jsx`
 
-### Adding a new studio collection
-1. Create `studio-lists/newstudio.txt` with one title per line (this is the curated *base*)
-2. Add `'newstudio'` to the `STUDIOS` array near the top of `server.js`
-3. Add its TMDB company ID(s) to `DEFAULT_STUDIO_COMPANIES` (and/or `studioCompanies` in config) so new
-   releases auto-discover; omit it to use the curated list only
-4. Add an emoji mapping in `STUDIO_EMOJIS` in `App.jsx`
-
-### Updating studio lists
-Edit the `.txt` files directly (curated base). One movie title per line. The server merges these with
-the studio's TMDB catalogue and filters to titles we own in Plex (any movie section), so a `.txt` title
-won't appear until it's in the collection. Restart the server, hit `/api/refresh`, or rebuild the container to apply.
-
 ### De-clustering a franchise
 Series whose titles share a long prefix (e.g. "Harry Potter and the ...") sort into one
 alphabetical cluster, so a shuffle pick there fills the whole row with that series. Add the
@@ -71,8 +58,7 @@ their distinctive part. Display titles are unaffected. `server.js` is bind-mount
 `docker-compose restart the-game` applies it (no rebuild).
 
 ### Refreshing Plex data without restart
-Hit `GET /api/refresh` -- this re-scans all Plex libraries, re-indexes owned movies, **and rebuilds
-the studio pools**, returning `{ ok, counts, studioCounts }`. The same refresh also runs automatically every
+Hit `GET /api/refresh` -- this re-scans all Plex libraries, returning `{ ok, counts }`. The same refresh also runs automatically every
 24 hours.
 
 ## Testing
@@ -83,23 +69,22 @@ There are no automated tests. To verify changes:
 2. Open `http://localhost:5173`
 3. Confirm splash animation plays (~5 seconds) with the "Legends Never Die" tagline + glow flourish
 4. Confirm poster grid loads with 6 movies per library row
-5. Confirm studio picks show with posters (all owned in Plex; check `studioCounts` from `/api/refresh`)
-6. Click "Play Again" -- new selections should appear, splash should NOT replay
-7. Click the mobile toggle -- layout should narrow
-8. `npx vite build` -- confirm production build succeeds
+5. Click "Play Again" -- new selections should appear, splash should NOT replay
+6. Click the mobile toggle -- layout should narrow
+7. `npx vite build` -- confirm production build succeeds
 
 ## Sensitive Values
 
-- `config.json` contains Plex token and TMDB API key -- it is gitignored
+- `config.json` contains the Plex token -- it is gitignored
 - Never hardcode tokens in source files
 - `config.example.json` has placeholder values for reference
 
 ## Docker
 
 - Multi-stage build: build stage compiles frontend, production stage runs Express
-- `config.json`, `studio-lists/`, and `server.js` are mounted as read-only volumes
+- `config.json` and `server.js` are mounted as read-only volumes
 - Synology Container Manager compatible (bridge network mode)
-- **Backend (`server.js`), config, or studio-list change:** `docker-compose restart the-game` (no rebuild)
+- **Backend (`server.js`) or config change:** `docker-compose restart the-game` (no rebuild)
 - **Frontend (`src/`) change:** `docker-compose up -d --build` (rebuilds `dist/`)
 - Prefer `restart` -- `--build` recreates the container (new ID) and can leave a stale
   `<oldid>_the-game` entry in Synology Container Manager until its package is restarted

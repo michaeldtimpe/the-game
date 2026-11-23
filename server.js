@@ -6,20 +6,6 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-const STUDIOS = ['marvel'];
-
-// TMDB company IDs used to auto-discover newer films per studio (hybrid freshness):
-// Marvel Studios. (Disney, Pixar and Lucasfilm films are the "House of Mouse" library row.)
-const DEFAULT_STUDIO_COMPANIES = {
-  marvel: [420],
-};
-
-// Quality gates for AUTO-DISCOVERED titles (curated titles are exempt — they're
-// deliberate picks). Keep out making-of featurettes, shorts, and TV specials.
-const MIN_DISCOVER_VOTES = 30;     // discover: skip obscure specials/featurettes
-const MIN_DISCOVERED_RUNTIME = 40; // minutes; skip shorts/featurettes (when runtime known)
-const MAX_DISCOVER_PAGES = 25;     // per company, 20 titles a page -- covers the back catalogue
-
 // Recency / anti-repeat tuning. Overridable via config.recency.
 const DEFAULT_RECENCY = {
   gameStrength: 0.9,    // how hard to push away from a just-picked spot (0-1)
@@ -28,8 +14,6 @@ const DEFAULT_RECENCY = {
   watchStrength: 0.6,   // how hard to push away from a recently-watched spot
   watchRadius: 18,      // neighborhood the watch penalty spans
   watchWindowDays: 30,  // how far back watch history still influences picks
-  studioStrength: 0.85, // anti-repeat strength for studio picks
-  studioDecay: 0.5,     // per-shuffle decay of the studio penalty
   maxAge: 5,            // drop recency records once older than this many shuffles
   weightFloor: 0.05,    // a spot's weight can never drop below this (never impossible)
   smallLibThreshold: 50,// libraries smaller than this skip the watch-history bias (e.g. "new")
@@ -49,67 +33,21 @@ function loadConfig() {
 }
 
 const config = loadConfig();
-const { plexUrl, plexToken, tmdbApiKey, libraries, port = 3000 } = config;
-const region = config.region || 'US';
-const studioCompanies = config.studioCompanies || DEFAULT_STUDIO_COMPANIES;
+const { plexUrl, plexToken, libraries, port = 3000 } = config;
 const RECENCY = { ...DEFAULT_RECENCY, ...(config.recency || {}) };
 
 // --- In-memory data ---
 
 const plexLibraries = new Map();  // sectionId -> { name, movies: [{ title, posterUrl }] }
-let ownedMovies = new Map();      // normalizedTitle -> [{ year, posterUrl }] across EVERY Plex movie section
-const studioLists = {};           // studio -> [curated title strings]
-const studioPools = {};           // studio -> [{ title, posterUrl }] (owned in Plex, vetted)
-const tmdbResolveCache = new Map();  // normalizedTitle -> { id, title, releaseDate, posterPath } | null
-const tmdbMetaCache = new Map();     // tmdb id -> { runtime, isDocumentary }
 
 // Recency state (in-memory; resets on restart, matching the app's stateless design).
 const recentLibPicks = new Map(); // sectionId -> [{ index, age }]
-const recentStudioPicks = {};     // studio -> [{ title (normalized), age }]
 let watchHistory = { fetchedAt: 0, bySection: new Map() }; // sectionId -> Map<normalizedTitle, viewedAt(sec)>
 
 // --- Helpers ---
 
 function normalizeTitle(t) {
   return String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Run an async mapper over items with a bounded number in flight, to stay
-// friendly to the TMDB API.
-async function mapLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const idx = cursor++;
-      results[idx] = await fn(items[idx], idx);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
-// --- Studio list loading ---
-
-function loadStudioLists() {
-  for (const studio of STUDIOS) {
-    const filePath = join(__dirname, 'studio-lists', `${studio}.txt`);
-    if (!existsSync(filePath)) {
-      console.warn(`Missing studio list: ${filePath}`);
-      studioLists[studio] = [];
-      continue;
-    }
-    const lines = readFileSync(filePath, 'utf-8')
-      .split('\n')
-      .map(l => l.trim())
-      .filter(Boolean);
-    studioLists[studio] = lines;
-    console.log(`Loaded ${lines.length} curated titles for ${studio}`);
-  }
 }
 
 // --- Title sort key ---
@@ -168,47 +106,6 @@ async function scanAllPlexLibraries() {
   await Promise.all(libraries.map(lib => fetchPlexLibrary(lib.sectionId, lib.name)));
 }
 
-// Index every movie we own, across all Plex movie sections (not just the ones shown
-// as rows -- e.g. a section not shown as a row still counts). Studio pools are
-// filtered against this, so studio picks are always something we can actually play.
-async function scanOwnedMovies() {
-  try {
-    const res = await fetch(`${plexUrl}/library/sections?X-Plex-Token=${plexToken}`, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`Plex returned ${res.status}`);
-    const sections = ((await res.json()).MediaContainer.Directory || []).filter(d => d.type === 'movie');
-    const next = new Map();
-    for (const section of sections) {
-      const r = await fetch(`${plexUrl}/library/sections/${section.key}/all?X-Plex-Token=${plexToken}`, { headers: { Accept: 'application/json' } });
-      if (!r.ok) throw new Error(`Plex section ${section.key} returned ${r.status}`);
-      for (const m of (await r.json()).MediaContainer.Metadata || []) {
-        if (m.type !== 'movie') continue;
-        const entry = {
-          year: m.year ?? null,
-          posterUrl: posterPath(m.thumb),
-        };
-        for (const t of new Set([m.title, m.originalTitle].filter(Boolean).map(normalizeTitle))) {
-          if (!next.has(t)) next.set(t, []);
-          next.get(t).push(entry);
-        }
-      }
-    }
-    ownedMovies = next;
-    console.log(`Indexed ${next.size} owned titles from ${sections.length} Plex movie sections`);
-  } catch (err) {
-    console.error('Owned-movie index failed (keeping the previous one):', err.message);
-  }
-}
-
-// The owned copy of a title, or null. Year must agree within one when both are known,
-// so a curated "The Avengers" doesn't match an unrelated film of the same name.
-function findOwned(title, releaseDate) {
-  const hits = ownedMovies.get(normalizeTitle(title));
-  if (!hits) return null;
-  const year = releaseDate ? Number(releaseDate.slice(0, 4)) : null;
-  if (!year) return hits[0];
-  return hits.find(h => h.year == null || Math.abs(h.year - year) <= 1) || null;
-}
-
 // Recently-watched bias (Feature #4): pull Plex watch history so we can steer
 // picks away from sections we were just in. Cached for RECENCY.historyTtlMs so a
 // movie night stays current without re-fetching on every shuffle.
@@ -234,143 +131,6 @@ async function refreshWatchHistory() {
   } catch (err) {
     console.error('Plex history fetch failed:', err.message);
     watchHistory.fetchedAt = now; // back off; don't hammer on failure
-  }
-}
-
-// --- TMDB API ---
-
-async function tmdbDiscover(companyId, page) {
-  try {
-    const url = `https://api.themoviedb.org/3/discover/movie?api_key=${encodeURIComponent(tmdbApiKey)}` +
-      `&with_companies=${companyId}&sort_by=primary_release_date.desc&include_adult=false` +
-      `&without_genres=99&vote_count.gte=${MIN_DISCOVER_VOTES}` + // drop documentaries / making-of / obscure specials
-      `&primary_release_date.lte=${todayStr()}&region=${region}&page=${page}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB discover returned ${res.status}`);
-    const data = await res.json();
-    return {
-      totalPages: data.total_pages || 1,
-      results: (data.results || []).map(m => ({
-        id: m.id,
-        title: m.title,
-        releaseDate: m.release_date || null,
-        posterPath: m.poster_path || null,
-      })),
-    };
-  } catch (err) {
-    console.error(`TMDB discover failed (company ${companyId}, page ${page}):`, err.message);
-    return { totalPages: 0, results: [] };
-  }
-}
-
-async function resolveTitle(title) {
-  const key = normalizeTitle(title);
-  if (tmdbResolveCache.has(key)) return tmdbResolveCache.get(key);
-  try {
-    const url = `https://api.themoviedb.org/3/search/movie?api_key=${encodeURIComponent(tmdbApiKey)}&query=${encodeURIComponent(title)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB search returned ${res.status}`);
-    const data = await res.json();
-    const hit = (data.results || [])[0];
-    const info = hit
-      ? { id: hit.id, title: hit.title, releaseDate: hit.release_date || null, posterPath: hit.poster_path || null }
-      : null;
-    tmdbResolveCache.set(key, info);
-    return info;
-  } catch (err) {
-    console.error(`TMDB search failed for "${title}":`, err.message);
-    tmdbResolveCache.set(key, null);
-    return null;
-  }
-}
-
-// One call -> runtime and whether it's a documentary. Used to keep featurettes and
-// shorts out of auto-discovered titles. Cached per id (these don't change).
-async function getMovieMeta(id) {
-  if (tmdbMetaCache.has(id)) return tmdbMetaCache.get(id);
-  try {
-    const url = `https://api.themoviedb.org/3/movie/${id}?api_key=${encodeURIComponent(tmdbApiKey)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB movie returned ${res.status}`);
-    const data = await res.json();
-    const meta = {
-      runtime: data.runtime ?? null,
-      isDocumentary: (data.genres || []).some(g => g.id === 99),
-    };
-    tmdbMetaCache.set(id, meta);
-    return meta;
-  } catch (err) {
-    console.error(`TMDB movie lookup failed for id ${id}:`, err.message);
-    return { runtime: null, isDocumentary: false }; // not cached: retry next rebuild
-  }
-}
-
-// --- Studio pools (Feature #1): curated base + the studio's TMDB catalogue,
-// filtered to titles we OWN in Plex, with posters precomputed so /api/shuffle
-// makes no Plex or TMDB calls. ---
-
-async function buildStudioPool(studio) {
-  const curated = studioLists[studio] || [];
-  const companies = studioCompanies[studio] || [];
-
-  // Walk each company's catalogue, newest first, so owned back-catalogue films count too.
-  const discovered = [];
-  for (const companyId of companies) {
-    for (let page = 1, totalPages = 1; page <= Math.min(totalPages, MAX_DISCOVER_PAGES); page++) {
-      const batch = await tmdbDiscover(companyId, page);
-      totalPages = batch.totalPages;
-      discovered.push(...batch.results);
-    }
-  }
-  // Seed the resolve cache with discovery data (id/date/poster already known).
-  for (const d of discovered) {
-    const key = normalizeTitle(d.title);
-    if (!tmdbResolveCache.has(key)) tmdbResolveCache.set(key, d);
-  }
-
-  // Candidate titles = curated (display titles win) + discovered, de-duped.
-  const curatedKeys = new Set(curated.map(normalizeTitle));
-  const byKey = new Map();
-  for (const t of curated) byKey.set(normalizeTitle(t), t);
-  for (const d of discovered) {
-    const key = normalizeTitle(d.title);
-    if (!byKey.has(key)) byKey.set(key, d.title);
-  }
-  const candidateTitles = [...byKey.values()];
-
-  // Filter to owned titles first (cheap, no API calls), then vet with bounded
-  // concurrency. Auto-discovered titles must also look like real features (runtime,
-  // not a documentary) so making-of featurettes and shorts don't sneak in. Curated
-  // titles TMDB can't resolve still count when Plex has them by title.
-  const owned = candidateTitles.filter(t => ownedMovies.has(normalizeTitle(t)));
-  const vetted = await mapLimit(owned, 6, async (title) => {
-    const info = await resolveTitle(title);
-    const copy = findOwned(title, info?.releaseDate);
-    if (!copy) return null;
-    if (!curatedKeys.has(normalizeTitle(title)) && info?.id) {
-      const meta = await getMovieMeta(info.id);
-      if (meta.isDocumentary) return null;
-      if (meta.runtime != null && meta.runtime < MIN_DISCOVERED_RUNTIME) return null;
-    }
-    return {
-      title, // keep the display/curated title
-      posterUrl: copy.posterUrl || (info?.posterPath ? `https://image.tmdb.org/t/p/w342${info.posterPath}` : null),
-    };
-  });
-  const seen = new Set();
-  const pool = vetted.filter(p => p && !seen.has(normalizeTitle(p.title)) && seen.add(normalizeTitle(p.title)));
-
-  if (pool.length === 0) {
-    console.warn(`Studio "${studio}": no owned titles found (Plex index empty or TMDB down?)`);
-  }
-  studioPools[studio] = pool;
-  console.log(`Studio "${studio}": ${pool.length} owned titles (from ${candidateTitles.length} candidates)`);
-}
-
-async function buildAllStudioPools() {
-  await scanOwnedMovies();
-  for (const studio of STUDIOS) {
-    await buildStudioPool(studio);
   }
 }
 
@@ -408,12 +168,6 @@ function ageRecency() {
     recentLibPicks.set(sid, picks
       .map(p => ({ ...p, age: p.age + 1 }))
       .filter(p => p.age <= RECENCY.maxAge));
-  }
-  for (const studio of STUDIOS) {
-    const picks = recentStudioPicks[studio] || [];
-    recentStudioPicks[studio] = picks
-      .map(p => ({ ...p, age: p.age + 1 }))
-      .filter(p => p.age <= RECENCY.maxAge);
   }
 }
 
@@ -479,28 +233,6 @@ function selectWithNeighborsWeighted(sortedMovies, sectionId, count = 6) {
   };
 }
 
-// Anti-repeat (#3) for studio picks over the vetted pool.
-function pickStudio(studio) {
-  const pool = studioPools[studio] || [];
-  if (pool.length === 0) return null;
-
-  const weights = pool.map(() => 1);
-  const recent = recentStudioPicks[studio] || [];
-  for (const r of recent) {
-    const strength = RECENCY.studioStrength * Math.pow(RECENCY.studioDecay, r.age);
-    for (let i = 0; i < pool.length; i++) {
-      if (normalizeTitle(pool[i].title) === r.title) weights[i] *= (1 - strength);
-    }
-  }
-  for (let i = 0; i < weights.length; i++) {
-    if (weights[i] < RECENCY.weightFloor) weights[i] = RECENCY.weightFloor;
-  }
-
-  const chosen = pool[weightedRandom(weights)];
-  recentStudioPicks[studio] = [...recent, { title: normalizeTitle(chosen.title), age: 0 }];
-  return chosen;
-}
-
 // --- API endpoints ---
 
 app.get('/api/shuffle', async (req, res) => {
@@ -518,16 +250,7 @@ app.get('/api/shuffle', async (req, res) => {
     libraryResults.push({ name: data.name, movies, selectedIndex });
   }
 
-  const studioPicks = STUDIOS.map(studio => {
-    const chosen = pickStudio(studio);
-    return {
-      studio: studio.charAt(0).toUpperCase() + studio.slice(1),
-      title: chosen?.title || null,
-      posterUrl: chosen?.posterUrl || null,
-    };
-  });
-
-  res.json({ libraries: libraryResults, studioPicks });
+  res.json({ libraries: libraryResults });
 });
 
 app.get('/api/poster', async (req, res) => {
@@ -547,15 +270,12 @@ app.get('/api/poster', async (req, res) => {
 
 app.get('/api/refresh', async (req, res) => {
   await scanAllPlexLibraries();
-  await buildAllStudioPools();
   const counts = {};
   for (const lib of libraries) {
     const data = plexLibraries.get(lib.sectionId);
     counts[data?.name || lib.name] = data?.movies.length || 0;
   }
-  const studioCounts = {};
-  for (const studio of STUDIOS) studioCounts[studio] = (studioPools[studio] || []).length;
-  res.json({ ok: true, counts, studioCounts });
+  res.json({ ok: true, counts });
 });
 
 // Unknown API path -> JSON 404 (so it doesn't fall through to the SPA catch-all).
@@ -576,24 +296,17 @@ if (existsSync(distPath)) {
 // --- Start ---
 
 async function start() {
-  console.log('Loading studio lists...');
-  loadStudioLists();
-
   console.log('Scanning Plex libraries...');
   await scanAllPlexLibraries();
-
-  console.log('Building studio pools...');
-  await buildAllStudioPools();
 
   app.listen(port, () => {
     console.log(`The Game server running on http://localhost:${port}`);
   });
 
-  // Refresh Plex libraries and studio pools every 24 hours.
+  // Refresh Plex libraries every 24 hours.
   setInterval(async () => {
-    console.log('Auto-refreshing Plex libraries and studio pools...');
+    console.log('Auto-refreshing Plex libraries...');
     await scanAllPlexLibraries();
-    await buildAllStudioPools();
     console.log('Auto-refresh complete.');
   }, 24 * 60 * 60 * 1000);
 }

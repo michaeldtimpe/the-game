@@ -2,16 +2,14 @@
 
 ## Overview
 
-The Game is a single-page web application with a Node.js backend and React frontend. All movie data is held in memory -- there is no database. The backend talks to two external APIs (Plex and TMDB) and serves both the API and the built frontend from a single Express process.
+The Game is a single-page web application with a Node.js backend and React frontend. All movie data is held in memory -- there is no database. The backend talks to the Plex API and serves both the API and the built frontend from a single Express process.
 
 ```
 Browser <---> Express (server.js, port 3000)
                 |         |
                 |         +--> Serves built React app (dist/)
                 |
-                +--> Plex API (movie titles + poster URLs)
-                +--> TMDB API (studio pick poster URLs)
-                +--> Studio text files (curated title lists)
+                +--> Plex API (movie titles, posters, watch history)
 ```
 
 ## Backend: `server.js`
@@ -20,29 +18,21 @@ A single Express file with no external dependencies beyond Express itself.
 
 ### Startup Sequence
 
-1. Load `config.json` (Plex URL/token, TMDB key, library definitions, optional `region`/`studioCompanies`/`recency`)
-2. Read studio `.txt` files from `studio-lists/` into memory arrays
-3. Fetch all movies from each configured Plex library section via the Plex API
-4. Sort each library alphabetically by a **sort key** that strips known franchise prefixes (see Franchise De-clustering)
-5. Index every Plex movie section (`ownedMovies`) and build the **owned studio pools** from curated lists + TMDB studio catalogues (see Studio Pools)
-6. Start Express on the configured port
-7. Schedule a background re-scan of all Plex libraries and a studio-pool rebuild every 24 hours
+1. Load `config.json` (Plex URL/token, library definitions, optional `recency`)
+2. Fetch all movies from each configured Plex library section via the Plex API
+3. Sort each library alphabetically by a **sort key** that strips known franchise prefixes (see Franchise De-clustering)
+4. Start Express on the configured port
+5. Schedule a background re-scan of all Plex libraries every 24 hours
 
 ### In-Memory Data
 
 ```
 plexLibraries:     Map<sectionId, { name, movies: [{ title, posterUrl }] }>
-studioLists:       { marvel: [titles], ... }            // curated base, from .txt
-ownedMovies:       Map<normalizedTitle, [{ year, posterUrl }]> // every Plex movie section
-studioPools:       { marvel: [{ title, posterUrl }], ... } // vetted: owned in Plex
-tmdbResolveCache:  Map<normalizedTitle, { id, releaseDate, posterPath } | null>
-tmdbMetaCache:     Map<tmdbId, { runtime, isDocumentary }>
 recentLibPicks:    Map<sectionId, [{ index, age }]>     // anti-repeat state
-recentStudioPicks: { marvel: [{ title, age }], ... }    // anti-repeat state
 watchHistory:      { fetchedAt, bySection: Map<sectionId, Map<title, viewedAt>> }
 ```
 
-Total memory footprint is minimal -- roughly 1,300 movies across all sources, each stored as a title string and a URL. Recency state (`recentLibPicks`, `recentStudioPicks`, `watchHistory`) is in-memory only and resets on restart.
+Total memory footprint is minimal -- a few thousand movies across the configured libraries, each stored as a title string and a URL. Recency state (`recentLibPicks`, `watchHistory`) is in-memory only and resets on restart.
 
 ### Core Algorithm: Neighbor Selection
 
@@ -63,19 +53,7 @@ This means the user sees a realistic alphabetical cluster of movies, and the act
 - **Anti-repeat (#3):** `recentLibPicks[sectionId]` holds recently-picked indices; each applies `gameStrength * gameDecay^age` around its index (radius clamped to `len/3` so small libraries aren't wiped out). The just-made pick is recorded *after* selection, so it only biases *future* shuffles.
 - **Recently-watched (#4):** for libraries at/above `smallLibThreshold`, `watchHistory` maps recently-watched titles (from Plex) to their indices; each applies `watchStrength * recencyWeight` (recencyWeight decays linearly to zero at `watchWindowDays`), steering away from sections recently watched. Skipped for small libraries (e.g. `New`).
 
-`weightedRandom(weights)` does cumulative-sum selection. Studio picks use the same idea over the vetted pool (`recentStudioPicks`, `studioStrength`/`studioDecay`).
-
-### Studio Pools
-
-`buildStudioPool(studio)` produces `studioPools[studio]`, a pre-vetted list of `{ title, posterUrl }`:
-
-1. **Base:** curated titles from `studio-lists/<studio>.txt`.
-2. **Catalogue:** each studio's films from its TMDB company IDs (`/discover/movie?with_companies=...&primary_release_date.lte=today`, newest first, up to `MAX_DISCOVER_PAGES` = 25 pages per company), de-duped against the curated titles.
-3. **Owned filter:** `scanOwnedMovies()` first indexes every Plex section of type `movie` (title and original title, normalized). A candidate is kept only if `findOwned(title, releaseDate)` finds it -- same normalized title, and year within one when TMDB resolved a release date (`tmdbResolveCache`). Curated titles TMDB can't resolve still count by title alone.
-4. **Feature gate (discovered titles only):** documentaries and anything under 40 minutes are dropped (`tmdbMetaCache`), so owned featurettes don't sneak in.
-5. **Poster:** the owned copy's Plex poster, falling back to TMDB's.
-
-If a pool comes back empty it stays empty and logs a warning (the studio row then shows "Unknown") -- it never falls back to titles we don't own. Because posters are baked into the pool, `/api/shuffle` makes **zero** Plex or TMDB calls. The index and pools are rebuilt at startup, every 24h, and on `/api/refresh`. Lookups are concurrency-limited (`mapLimit`) to stay friendly to TMDB.
+`weightedRandom(weights)` does cumulative-sum selection.
 
 ### Franchise De-clustering
 
@@ -85,17 +63,13 @@ To avoid this, libraries are sorted by `sortKey(title)` rather than the raw titl
 
 ### API Endpoints
 
-**`GET /api/shuffle`** -- The primary endpoint. Ages recency state and refreshes Plex watch history (cached ~5 min), then for each library runs the recency-weighted neighbor selection, and for each studio picks (weighted) from the pre-vetted pool. Makes no TMDB or per-pick external calls. Returns a single JSON payload with all results.
+**`GET /api/shuffle`** -- The primary endpoint. Ages recency state and refreshes Plex watch history (cached ~5 min), then for each library runs the recency-weighted neighbor selection. Makes no per-pick external calls (posters load lazily through `/api/poster`). Returns a single JSON payload with all results.
 
-**`GET /api/refresh`** -- Re-fetches all Plex libraries **and rebuilds the studio pools** on demand. Returns `{ ok, counts, studioCounts }`. The same re-scan + rebuild also runs automatically every 24 hours via a `setInterval` started after the server boots.
+**`GET /api/refresh`** -- Re-fetches all Plex libraries on demand. Returns `{ ok, counts }`. The same re-scan also runs automatically every 24 hours via a `setInterval` started after the server boots.
 
 ### Watch History
 
 `refreshWatchHistory()` pulls `/status/sessions/history/all` from Plex and indexes recently-watched titles by section (`watchHistory.bySection`). It's cached for `recency.historyTtlMs` (default 5 min) and refreshed lazily at shuffle time, so a movie night stays current without a fetch on every shuffle. This feeds the recently-watched bias (#4).
-
-### TMDB Caching
-
-Two caches back the studio pools, both for the process lifetime since the data is stable: `tmdbResolveCache` (normalized title -> `{ id, releaseDate, posterPath }`) and `tmdbMetaCache` (tmdb id -> `{ runtime, isDocumentary }`; failed lookups aren't cached, so they retry on the next rebuild). Because pools are precomputed, individual shuffles make zero TMDB calls.
 
 ### Static File Serving
 
@@ -108,11 +82,8 @@ In production, the built React app (`dist/`) is served as static files from Expr
 ```
 App
  +-- ShuffleButton        -- Play / Play Again / Shuffling...
- +-- LibrarySection (x3)  -- One per Plex library
- |    +-- MovieCard (x6)  -- Poster + title, isSelected for white highlight
- +-- StudioPicks
-      +-- StudioSection (x4)
-           +-- MovieCard   -- Poster + title with studio header
+ +-- LibrarySection (xN)  -- One per configured Plex library (incl. House of Mouse)
+      +-- MovieCard (x6)  -- Poster + title, isSelected for white highlight
 ```
 
 ### State
@@ -140,17 +111,17 @@ All styles are in `App.css`. Key design decisions:
 - **Yellow (#e5a00d)** accent color for titles and buttons
 - **White** for selected movie titles and section headers
 - **Poster normalization**: all posters forced to 2:3 aspect ratio via `padding-bottom: 150%` with absolute positioning, preventing different source image sizes from breaking the grid
-- **Grid layout**: 6-column grid for library rows, flexbox with `space-between` for 4 studio picks (aligning first/last cards with the library grid edges)
+- **Grid layout**: 6-column grid for library rows
 - **Mobile toggle**: adds `.mobile` class that constrains to 420px max-width and switches to 3-column library rows
 
 ## Docker
 
 Multi-stage build for a small production image:
 
-1. **Build stage**: `node:20-alpine`, installs all deps, runs `vite build`
-2. **Production stage**: `node:20-alpine`, installs only production deps (Express), copies built frontend and server
+1. **Build stage**: `node:22-alpine`, installs all deps, runs `vite build`
+2. **Production stage**: `node:22-alpine`, installs only production deps (Express), copies built frontend and server
 
-The `docker-compose.yml` mounts `config.json`, `studio-lists/`, and `server.js` as read-only volumes, so backend/config/list changes apply with a `docker-compose restart` (no rebuild). Only frontend (`src/` -> `dist/`) changes require rebuilding the image. `server.js` is also `COPY`ed into the image as a fallback for running without the mount. Uses `network_mode: bridge` for Synology compatibility.
+The `docker-compose.yml` mounts `config.json` and `server.js` as read-only volumes, so backend/config changes apply with a `docker-compose restart` (no rebuild). Only frontend (`src/` -> `dist/`) changes require rebuilding the image. `server.js` is also `COPY`ed into the image as a fallback for running without the mount. Uses `network_mode: bridge` for Synology compatibility.
 
 Preferring `restart` over `up -d --build` matters on Synology: a rebuild recreates the container with a new ID, which Container Manager can surface as a stale `<oldid>_the-game` entry until its package is restarted. A `restart` keeps the same container, avoiding that.
 
@@ -159,10 +130,9 @@ Preferring `restart` over `up -d --build` matters on Synology: a rebuild recreat
 ```
 1. User clicks "Play" or "Play Again"
 2. Frontend: fetch('/api/shuffle')
-3. Backend: for each library, selectWithNeighbors(sortedMovies, 6)
-4. Backend: for each studio, random title + getTmdbPoster(title)
-5. Backend: returns { libraries: [...], studioPicks: [...] }
-6. Frontend: renders poster grid with data
+3. Backend: for each library, selectWithNeighborsWeighted(sortedMovies, sectionId, 6)
+4. Backend: returns { libraries: [...] }
+5. Frontend: renders poster grid with data
 ```
 
 ## External Dependencies
@@ -177,5 +147,4 @@ Preferring `restart` over `up -d --build` matters on Synology: a rebuild recreat
 - **concurrently** -- Runs backend + Vite in parallel during dev
 
 ### External APIs
-- **Plex API** -- Movie metadata and poster images (local network)
-- **TMDB API** -- Poster images for studio picks (internet, free tier)
+- **Plex API** -- Movie metadata, poster images and watch history (local network)
